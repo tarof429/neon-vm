@@ -16,7 +16,9 @@ const (
 
 	VM_STATE_PENDING     string = "Pending"
 	VM_STATE_NOT_STARTED string = "Not started"
+	VM_STATE_STARTING    string = "Starting"
 	VM_STATE_RUNNING     string = "Running"
+	VM_STATE_STOPPING    string = "Stopping"
 	VM_STATE_STOPPED     string = "Stopped"
 )
 
@@ -69,6 +71,8 @@ func startVM() {
 		state := vmlist[index].status
 		if state == VM_STATE_NOT_STARTED || state == VM_STATE_STOPPED {
 			go _startVM(index)
+		} else if state == VM_STATE_PENDING {
+			fmt.Println("VM is still being created")
 		}
 	} else {
 		fmt.Printf("VM %v does not exists\n", name)
@@ -76,8 +80,10 @@ func startVM() {
 }
 
 func _startVM(index int) {
-	time.Sleep(60 * time.Second)
-	updateStatus(index, VM_STATE_RUNNING)
+	defer updateStatus(index, VM_STATE_RUNNING)
+	updateStatus(index, VM_STATE_STARTING)
+	time.Sleep(10 * time.Second)
+
 }
 
 func stopVM() {
@@ -91,15 +97,15 @@ func stopVM() {
 
 	if index != -1 {
 		go _stopVM(index)
-
 	} else {
 		fmt.Printf("VM %v does not exists\n", name)
 	}
 }
 
 func _stopVM(index int) {
-	time.Sleep(60 * time.Second)
-	updateStatus(index, VM_STATE_STOPPED)
+	updateStatus(index, VM_STATE_STOPPING)
+	defer updateStatus(index, VM_STATE_STOPPED)
+	time.Sleep(10 * time.Second)
 }
 
 func validateVMSettings(name string, cpu int, memory int) bool {
@@ -114,6 +120,7 @@ func validateVMSettings(name string, cpu int, memory int) bool {
 
 	if findVM(name) != -1 {
 		fmt.Printf("Unable to create a VM with the same name: %v\n", name)
+		return false
 	}
 
 	return true
@@ -168,8 +175,9 @@ func createVM() {
 }
 
 func _createVM(index int) {
-	time.Sleep(60 * time.Second)
-	updateStatus(index, VM_STATE_STOPPED)
+	defer updateStatus(index, VM_STATE_STOPPED)
+	time.Sleep(10 * time.Second)
+
 }
 
 func updateStatus(index int, status string) int {
@@ -200,7 +208,7 @@ func deleteVM() {
 func _deleteVM(index int) {
 	time.Sleep(10 * time.Second)
 	updateStatus(index, VM_STATE_STOPPED)
-	time.Sleep(30 * time.Second)
+	time.Sleep(10 * time.Second)
 	vmlist = slices.Delete(vmlist, index, index+1)
 }
 
