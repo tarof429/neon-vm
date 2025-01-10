@@ -48,29 +48,25 @@ func newVMManager() (m *VMManager) {
 	return m
 }
 
-func (m *VMManager) list() {
-	fmt.Println("***********************")
-	fmt.Println("***** Listing VMs *****")
-	fmt.Println("***********************")
-
+func (m *VMManager) List() {
 	for _, vm := range m.vmlist {
 		fmt.Printf("%v\n", vm)
 	}
 }
 
-func (m *VMManager) start() {
+func (m *VMManager) Start() {
 	var s string
 
 	fmt.Printf("Enter the VM name: ")
 	s, _ = reader.ReadString('\n')
 	name := strings.TrimSpace(s)
 
-	index := m.find(name)
+	index := m.Find(name)
 
 	if index != -1 {
 		state := m.vmlist[index].status
 		if state == VM_STATE_NOT_STARTED || state == VM_STATE_STOPPED {
-			go m._start(index)
+			go m.StartWithIndex(index)
 		} else if state == VM_STATE_PENDING {
 			fmt.Println("VM is still being created")
 		}
@@ -79,36 +75,35 @@ func (m *VMManager) start() {
 	}
 }
 
-func (m *VMManager) _start(index int) {
-	defer m.updateStatus(index, VM_STATE_RUNNING)
-	m.updateStatus(index, VM_STATE_STARTING)
+func (m *VMManager) StartWithIndex(index int) {
+	defer m.UpdateStatus(index, VM_STATE_RUNNING)
+	m.UpdateStatus(index, VM_STATE_STARTING)
 	time.Sleep(10 * time.Second)
-
 }
 
-func (m *VMManager) stop() {
+func (m *VMManager) Stop() {
 	var s string
 
 	fmt.Printf("Enter the VM name: ")
 	s, _ = reader.ReadString('\n')
 	name := strings.TrimSpace(s)
 
-	index := m.find(name)
+	index := m.Find(name)
 
 	if index != -1 {
-		go m._stop(index)
+		go m.StopWithIndex(index)
 	} else {
 		fmt.Printf("VM %v does not exists\n", name)
 	}
 }
 
-func (m *VMManager) _stop(index int) {
-	m.updateStatus(index, VM_STATE_STOPPING)
-	defer m.updateStatus(index, VM_STATE_STOPPED)
+func (m *VMManager) StopWithIndex(index int) {
+	m.UpdateStatus(index, VM_STATE_STOPPING)
+	defer m.UpdateStatus(index, VM_STATE_STOPPED)
 	time.Sleep(10 * time.Second)
 }
 
-func (m *VMManager) validateVMSettings(name string, cpu int, memory int) bool {
+func (m *VMManager) ValidateVMSettings(name string, cpu int, memory int) bool {
 	if cpu+m.cpuUsed > MAX_CPUS {
 		fmt.Printf("Unable to allocated %v CPU to VM", cpu)
 		return false
@@ -118,7 +113,7 @@ func (m *VMManager) validateVMSettings(name string, cpu int, memory int) bool {
 		return false
 	}
 
-	if m.find(name) != -1 {
+	if m.Find(name) != -1 {
 		fmt.Printf("Unable to create a VM with the same name: %v\n", name)
 		return false
 	}
@@ -126,7 +121,7 @@ func (m *VMManager) validateVMSettings(name string, cpu int, memory int) bool {
 	return true
 }
 
-func (m *VMManager) create() {
+func (m *VMManager) Create() {
 	var name string
 	var memory int
 	var cpu int
@@ -155,7 +150,7 @@ func (m *VMManager) create() {
 		return
 	}
 
-	if !m.validateVMSettings(name, cpu, memory) {
+	if !m.ValidateVMSettings(name, cpu, memory) {
 		return
 	}
 
@@ -167,19 +162,19 @@ func (m *VMManager) create() {
 
 	m.vmlist = append(m.vmlist, vm)
 
-	index := m.find(name)
+	index := m.Find(name)
 
 	if index != -1 {
-		go m._create(index)
+		go m.CreateWithIndex(index)
 	}
 }
 
-func (m *VMManager) _create(index int) {
-	defer m.updateStatus(index, VM_STATE_STOPPED)
+func (m *VMManager) CreateWithIndex(index int) {
+	defer m.UpdateStatus(index, VM_STATE_STOPPED)
 	time.Sleep(10 * time.Second)
 }
 
-func (m *VMManager) updateStatus(index int, status string) int {
+func (m *VMManager) UpdateStatus(index int, status string) int {
 
 	if index != -1 {
 		m.vmlist[index].status = status
@@ -187,12 +182,12 @@ func (m *VMManager) updateStatus(index int, status string) int {
 	return index
 }
 
-func (m *VMManager) getStatus(index int) string {
+func (m *VMManager) GetStatus(index int) string {
 
 	return m.vmlist[index].status
 }
 
-func (m *VMManager) delete() {
+func (m *VMManager) Delete() {
 	fmt.Printf("Enter the name of the VM: ")
 
 	var s string
@@ -200,25 +195,25 @@ func (m *VMManager) delete() {
 	s, _ = reader.ReadString('\n')
 	name := strings.TrimSpace(s)
 
-	index := m.find(name)
+	index := m.Find(name)
 
 	if index != -1 {
-		go m._delete(index)
+		go m.DeleteWithIndex(index)
 	} else {
 		fmt.Printf("VM %v does not exists\n", name)
 	}
 }
 
-func (m *VMManager) _delete(index int) {
-	if m.getStatus(index) == VM_STATE_RUNNING {
-		m._stop(index)
+func (m *VMManager) DeleteWithIndex(index int) {
+	if m.GetStatus(index) == VM_STATE_RUNNING {
+		m.StopWithIndex(index)
 	}
-	m.updateStatus(index, VM_STATE_DELETING)
+	m.UpdateStatus(index, VM_STATE_DELETING)
 	time.Sleep(10 * time.Second)
 	m.vmlist = slices.Delete(m.vmlist, index, index+1)
 }
 
-func (m *VMManager) find(name string) int {
+func (m *VMManager) Find(name string) int {
 	for index, vm := range m.vmlist {
 		if vm.name == name {
 			return index
@@ -259,15 +254,15 @@ func main() {
 
 		switch choice {
 		case "1":
-			m.list()
+			m.List()
 		case "2":
-			m.start()
+			m.Start()
 		case "3":
-			m.stop()
+			m.Stop()
 		case "4":
-			m.create()
+			m.Create()
 		case "5":
-			m.delete()
+			m.Delete()
 		case "6":
 			exitNeonVM()
 		default:
