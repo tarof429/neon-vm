@@ -25,4 +25,5 @@ go.work.sum
 .env
 
 # data
-neon.json
+
+dist
