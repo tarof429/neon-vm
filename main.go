@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -11,8 +13,9 @@ import (
 )
 
 const (
-	MAX_CPUS   int = 25
-	MAX_MEMORY int = 128
+	MAX_CPUS       int    = 25
+	MAX_MEMORY     int    = 128
+	NEON_DATA_FILE string = "neon.json"
 
 	VM_STATE_PENDING     string = "Pending"
 	VM_STATE_NOT_STARTED string = "Not started"
@@ -28,28 +31,28 @@ var (
 )
 
 type VMManager struct {
-	vmlist     []VM
+	VMList     []VM
 	cpuUsed    int
 	memoryUsed int
 }
 
 type VM struct {
-	name   string
-	memory int
-	cpu    int
+	Name   string
+	Memory int
+	Cpu    int
 	status string
 }
 
 func newVMManager() (m *VMManager) {
 	m = &VMManager{
-		vmlist: make([]VM, 0),
+		VMList: make([]VM, 0),
 	}
 
 	return m
 }
 
 func (m *VMManager) List() {
-	for _, vm := range m.vmlist {
+	for _, vm := range m.VMList {
 		fmt.Printf("%v\n", vm)
 	}
 }
@@ -64,7 +67,7 @@ func (m *VMManager) Start() {
 	index := m.Find(name)
 
 	if index != -1 {
-		state := m.vmlist[index].status
+		state := m.VMList[index].status
 		if state == VM_STATE_NOT_STARTED || state == VM_STATE_STOPPED {
 			go m.StartWithIndex(index)
 		} else if state == VM_STATE_PENDING {
@@ -97,6 +100,11 @@ func (m *VMManager) Stop() {
 	}
 }
 
+func (m *VMManager) StopAllVMs() {
+	for i := 0; i < len(m.VMList); i++ {
+		go m.StopWithIndex(i)
+	}
+}
 func (m *VMManager) StopWithIndex(index int) {
 	m.UpdateStatus(index, VM_STATE_STOPPING)
 	defer m.UpdateStatus(index, VM_STATE_STOPPED)
@@ -155,36 +163,36 @@ func (m *VMManager) Create() {
 	}
 
 	vm := VM{
-		name:   name,
-		memory: memory,
-		cpu:    cpu,
+		Name:   name,
+		Memory: memory,
+		Cpu:    cpu,
 		status: VM_STATE_PENDING}
-
-	m.vmlist = append(m.vmlist, vm)
 
 	index := m.Find(name)
 
-	if index != -1 {
-		go m.CreateWithIndex(index)
-	}
-}
+	if index == -1 {
+		m.VMList = append(m.VMList, vm)
 
-func (m *VMManager) CreateWithIndex(index int) {
-	defer m.UpdateStatus(index, VM_STATE_STOPPED)
-	time.Sleep(10 * time.Second)
+		actuallyCreate := func() {
+			index := m.Find(name)
+			time.Sleep(10 * time.Second)
+			m.UpdateStatus(index, VM_STATE_STOPPED)
+		}
+		actuallyCreate()
+	}
 }
 
 func (m *VMManager) UpdateStatus(index int, status string) int {
 
 	if index != -1 {
-		m.vmlist[index].status = status
+		m.VMList[index].status = status
 	}
 	return index
 }
 
 func (m *VMManager) GetStatus(index int) string {
 
-	return m.vmlist[index].status
+	return m.VMList[index].status
 }
 
 func (m *VMManager) Delete() {
@@ -210,21 +218,69 @@ func (m *VMManager) DeleteWithIndex(index int) {
 	}
 	m.UpdateStatus(index, VM_STATE_DELETING)
 	time.Sleep(10 * time.Second)
-	m.vmlist = slices.Delete(m.vmlist, index, index+1)
+	m.VMList = slices.Delete(m.VMList, index, index+1)
 }
 
 func (m *VMManager) Find(name string) int {
-	for index, vm := range m.vmlist {
-		if vm.name == name {
+	for index, vm := range m.VMList {
+		if vm.Name == name {
 			return index
 		}
 	}
 	return -1
 }
 
-func exitNeonVM() {
-	fmt.Println("Exiting Neon VM. Goodbye!")
-	os.Exit(0)
+func (m *VMManager) WriteToDisk() bool {
+
+	data, err := json.MarshalIndent(m.VMList, "", "\t")
+
+	if err != nil {
+		fmt.Println("Error when writing data")
+		return false
+	}
+
+	err = os.WriteFile(
+		filepath.Join(".", NEON_DATA_FILE), data, 0644)
+
+	if err != nil {
+		fmt.Println(err.Error())
+	}
+
+	return err != nil
+}
+
+func (m *VMManager) ReadFromDisk() bool {
+	data, err := os.ReadFile(
+		filepath.Join(".", NEON_DATA_FILE))
+
+	if err != nil {
+		fmt.Printf("Error while loading %v\n", NEON_DATA_FILE)
+		return false
+	}
+
+	err = json.Unmarshal(data, &m.VMList)
+
+	if err != nil {
+		return false
+	} else {
+		for i := 0; i < len(m.VMList); i++ {
+			m.VMList[i].status = VM_STATE_STOPPED
+		}
+		return true
+	}
+}
+
+func (m *VMManager) ExitNeonVM() {
+	fmt.Println("Goodbye!")
+
+	status := m.WriteToDisk()
+
+	if status {
+		os.Exit(1)
+	} else {
+		os.Exit(0)
+	}
+
 }
 
 func usage() {
@@ -236,13 +292,16 @@ func usage() {
 	fmt.Println("3) Stop VM")
 	fmt.Println("4) Create VM")
 	fmt.Println("5) Delete VM")
-	fmt.Println("6) Exit Neon VM")
+	fmt.Println("6) Stop all VMs")
+	fmt.Println("7) Exit Neon VM")
 }
 
 func main() {
 	var choice string
 
 	m := newVMManager()
+
+	m.ReadFromDisk()
 
 	reader = bufio.NewReader(os.Stdin)
 
@@ -264,7 +323,9 @@ func main() {
 		case "5":
 			m.Delete()
 		case "6":
-			exitNeonVM()
+			m.StopAllVMs()
+		case "7":
+			m.ExitNeonVM()
 		default:
 			usage()
 		}
