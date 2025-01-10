@@ -44,10 +44,6 @@ type VM struct {
 	status string
 }
 
-func A() {
-
-}
-
 func NewVMManager() (m *VMManager) {
 	m = &VMManager{
 		VMList: make([]VM, 0),

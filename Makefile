@@ -10,5 +10,5 @@ build: ## Build the code
 test: ## Run all tests
 	go test -v ./...
 
-clean:
+clean: ## Remove the dist directory
 	rm -r ./dist
